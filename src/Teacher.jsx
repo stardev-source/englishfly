@@ -4,7 +4,7 @@ import { db } from './firebase.js';
 import { LEVELS, findTest } from './data/tests.js';
 
 // Teacher password. Set VITE_TEACHER_PASSWORD in Vercel (Settings -> Environment Variables).
-const PASSWORD = import.meta.env.VITE_TEACHER_PASSWORD || 'teacher123';
+const PASSWORD = import.meta.env.VITE_TEACHER_PASSWORD || 'shirin2026';
 const AUTH_KEY = 'ef_teacher_ok';
 const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
