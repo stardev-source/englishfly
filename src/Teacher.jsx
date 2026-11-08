@@ -205,14 +205,14 @@ function Panel({ onLogout }) {
     return true;
   };
 
-  const bulkDelete = async (list, message, expected) => {
+   const bulkDelete = async (list, message, expected) => {
     if (!list.length || !confirmTyped(message, expected)) return false;
     try {
       await deleteResults(list);
       dropFromScreen(list);
       return true;
-    } catch {
-      window.alert('Could not delete. Check your internet connection and Firestore rules.');
+    } catch (e) {
+      window.alert('Could not delete: ' + (e.code || e.message));
       return false;
     }
   };
