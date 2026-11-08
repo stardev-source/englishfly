@@ -58,7 +58,14 @@ function downloadCsv(rows) {
   a.click();
   URL.revokeObjectURL(url);
 }
-
+// Delete many results at once (Firestore allows up to 500 operations per batch).
+async function deleteResults(list) {
+  for (let i = 0; i < list.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const r of list.slice(i, i + 400)) batch.delete(doc(db, 'results', r.id));
+    await batch.commit();
+  }
+}
 export default function Teacher() {
     // Delete many results at once (Firestore allows up to 500 operations per batch).
 async function deleteResults(list) {
