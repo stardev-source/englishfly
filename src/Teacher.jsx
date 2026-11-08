@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { LEVELS, findTest } from './data/tests.js';
 
@@ -60,6 +60,14 @@ function downloadCsv(rows) {
 }
 
 export default function Teacher() {
+    // Delete many results at once (Firestore allows up to 500 operations per batch).
+async function deleteResults(list) {
+  for (let i = 0; i < list.length; i += 400) {
+    const batch = writeBatch(db);
+    for (const r of list.slice(i, i + 400)) batch.delete(doc(db, 'results', r.id));
+    await batch.commit();
+  }
+}
   const [ok, setOk] = useState(() => sessionStorage.getItem(AUTH_KEY) === '1');
   if (!ok) {
     return (
@@ -180,7 +188,65 @@ function Panel({ onLogout }) {
       window.alert('Could not delete the result.');
     }
   };
+  // Remove deleted results from the screen.
+  const dropFromScreen = (list) => {
+    const ids = new Set(list.map((r) => r.id));
+    setResults((prev) => prev.filter((r) => !ids.has(r.id)));
+  };
 
+  // Ask the teacher to type a word before a big delete.
+  const confirmTyped = (message, expected) => {
+    const typed = window.prompt(`${message}\n\nType  ${expected}  to confirm:`);
+    if (typed === null) return false;
+    if (typed.trim() !== expected) {
+      window.alert('Text did not match. Nothing was deleted.');
+      return false;
+    }
+    return true;
+  };
+
+  const bulkDelete = async (list, message, expected) => {
+    if (!list.length || !confirmTyped(message, expected)) return false;
+    try {
+      await deleteResults(list);
+      dropFromScreen(list);
+      return true;
+    } catch {
+      window.alert('Could not delete. Check your internet connection and Firestore rules.');
+      return false;
+    }
+  };
+
+  // Delete the whole group: every student, every test.
+  const removeGroup = async () => {
+    const list = results.filter((r) => (r.groupName || '').trim() === group);
+    const done = await bulkDelete(
+      list,
+      `This will permanently delete ALL ${list.length} results of group "${group}" (every student and every test).`,
+      group
+    );
+    if (done) setGroup('');
+  };
+
+  // Delete only the results that are currently shown (group + test + search filters).
+  const removeShown = async () => {
+    await bulkDelete(
+      filtered,
+      `This will permanently delete the ${filtered.length} results that are shown now.`,
+      'DELETE'
+    );
+  };
+
+  // Delete all results of one student.
+  const removeStudent = async (s) => {
+    const list = results.filter((r) => studentKey(r) === s.key);
+    const done = await bulkDelete(
+      list,
+      `This will permanently delete ALL ${list.length} results of ${s.name}.`,
+      'DELETE'
+    );
+    if (done) setStudent(null);
+  };
   // ---- single result view ----
   if (openResult) {
     return <ResultDetail result={openResult} onBack={() => setOpenResult(null)} onDelete={() => remove(openResult)} />;
@@ -202,6 +268,10 @@ function Panel({ onLogout }) {
               Group: {s.group || '-'} · Tests completed: {s.testsDone} · Overall: {s.overall === null ? '-' : `${s.overall}%`}
             </p>
             <ResultsTable rows={s.results} onOpen={setOpenResult} hideStudent />
+                 <ResultsTable rows={s.results} onOpen={setOpenResult} hideStudent />
+            <button className="finish" onClick={() => removeStudent(s)}>
+              Delete all results of this student
+            </button>
           </main>
         </div>
       );
@@ -246,7 +316,20 @@ function Panel({ onLogout }) {
             ))}
           </select>
         </div>
-
+        {(group || search.trim() || testId) && (
+          <div className="danger-row">
+            {group && (
+              <button className="danger-btn" onClick={removeGroup}>
+                Delete group “{group}” ({results.filter((r) => (r.groupName || '').trim() === group).length} results)
+              </button>
+            )}
+            {(search.trim() || testId || group) && filtered.length > 0 && (
+              <button className="danger-btn" onClick={removeShown}>
+                Delete shown results ({filtered.length})
+              </button>
+            )}
+          </div>
+        )}
         <div className="filters">
           <button className={tab === 'students' ? 'on' : ''} onClick={() => setTab('students')}>
             Students ({students.length})
